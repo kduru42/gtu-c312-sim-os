@@ -1,0 +1,490 @@
+########################################################################
+#  GTU-C312  :  Tiny co-operative OS demo
+#  ────────────────────────────────────────────────────────────────────
+#  – 1 kernel thread  (the OS itself)
+#  – 3 user threads   (sort, search, demo)
+########################################################################
+
+Begin Data Section
+# --- hardware registers ------------------------------------------------
+0   21        # PC  → boot at OS code (starts at address 21)
+1   900       # SP  → OS stack (grows downward)
+2   0         # syscall result (not used in this version)
+3   0         # global instruction counter (for thread start times)
+
+# --- kernel scratch / syscall registers --------------------------------
+4   0         # SYS NO   (set by trap, 0=YIELD, 1=HLT, 2=PRN)
+5   0         # SYS ARG  (PRN uses this for the address to print from)
+6   0         # JUMP PTR used by USER instruction
+
+# --- kernel constants ---------------------------------------------------
+10  11         # THREAD_COUNT   (3 user threads)
+11  0         # CUR_THREAD_IDX (0-based index of current thread)
+12  -1        # CONST_NEG_ONE (for unconditional JIF jumps)
+13  8         # THREAD_SLOT_SIZE (8 words per thread)
+14  100       # TTB_BASE (Thread Table Base Address)
+15 0          # HALTED_THREAD_COUNT
+16 10          # thread count to check halt
+17 0            # register to store address of instr_used
+
+# --- Thread States (as values) ---
+# 0 = READY
+# 1 = RUNNING
+# 2 = BLOCKED
+# 3 = HALTED
+
+# --- syscall handler vector (used by CPU trap) -------------------------
+40  87        # address of syscall dispatcher
+
+# --- thread table (slot size = 8 words) --------------------------------
+# slot 0 : the OS itself
+100 0         # ID
+101 0         # start-time
+102 0         # instr-used
+103 21        # saved-PC
+104 900       # saved-SP
+105 0         # state (0=READY)
+106 0         # block_counter
+107 0         # reserved
+
+# slot 1 : thread-1 (bubble-sort)
+108 1         # ID
+109 0         # start-time
+110 0         # instr-used
+111 1000      # saved-PC
+112 1999      # saved-SP
+113 0         # state
+114 0         # block_counter
+115 0         # reserved
+
+# slot 2 : thread-2 (linear search)
+116 2         # ID
+117 0         # start-time
+118 0         # instr-used
+119 2000      # saved-PC
+120 2999      # saved-SP
+121 0         # state
+122 0         # block_counter
+123 0         # reserved
+
+# slot 3 : thread-3 (demo loop)
+124 3         # ID
+125 0         # start-time
+126 0         # instr-used
+127 3000      # saved-PC
+128 3999      # saved-SP
+129 0         # state
+130 0         # block_counter
+131 0         # reserved
+
+# slot 4 : thread-4
+132 4         # ID
+133 0         # start-time
+134 0         # instr-used
+135 4000      # saved-PC
+136 4999      # saved-SP
+137 0         # state
+138 0         # block_counter
+139 0         # reserved
+
+# slot 5 : thread-5
+140 5         # ID
+141 0         # start-time
+142 0         # instr-used
+143 5000      # saved-PC
+144 5999      # saved-SP
+145 0         # state
+146 0         # block_counter
+147 0         # reserved
+
+# slot 6 : thread-6
+148 6         # ID
+149 0         # start-time
+150 0         # instr-used
+151 6000      # saved-PC
+152 6999      # saved-SP
+153 0         # state
+154 0         # block_counter
+155 0         # reserved
+
+# slot 7 : thread-7
+156 7         # ID
+157 0         # start-time
+158 0         # instr-used
+159 7000      # saved-PC
+160 7999      # saved-SP
+161 0         # state
+162 0         # block_counter
+163 0         # reserved
+
+# slot 8 : thread-8
+164 8         # ID
+165 0         # start-time
+166 0         # instr-used
+167 8000      # saved-PC
+168 8999      # saved-SP
+169 0         # state
+170 0         # block_counter
+171 0         # reserved
+
+# slot 9 : thread-9
+172 9         # ID
+173 0         # start-time
+174 0         # instr-used
+175 9000      # saved-PC
+176 9999      # saved-SP
+177 0         # state
+178 0         # block_counter
+179 0         # reserved
+
+# slot 10 : thread-10
+180 10         # ID
+181 0         # start-time
+182 0         # instr-used
+183 10000      # saved-PC
+184 10999      # saved-SP
+185 0         # state
+186 0         # block_counter
+187 0         # reserved
+
+# --- data for user threads ---------------------------------------------
+# bubble-sort input (5 numbers for speed)
+1000 5        # N=5
+1001 7        # input numbers
+1002 3
+1003 8
+1004 2
+1005 1
+# scratch space for sort
+1050 0        # i (outer loop)
+1051 0        # j (inner loop)
+1052 0        # ptr_j
+1053 0        # ptr_j+1
+1054 0        # val_j
+1055 0        # val_j+1
+1056 1001     # array_base_addr = 1001
+1057 1099     # temp_swap_ptr points to a safe temp location
+1099 0        # The temporary cell for swaps
+1500 0      # temporary cell to store instr_used
+
+# linear-search input
+2000 10       # N=10
+2001 11       # KEY to find
+2002 12       # input numbers
+2003 77
+2004 3
+2005 90
+2006 11
+2007 33
+2008 4
+2009 55
+2010 8
+2011 72
+# scratch space for search
+2050 0        # i (loop counter)
+2051 0        # base_ptr
+2052 0        # current_ptr
+2053 0        # current_val
+2054 -1       # result_idx (defaults to -1)
+2500 0
+
+# demo-loop data
+3050 1        # counter
+3051 10       # loop limit
+3500 0
+
+4500 0
+5500 0
+6500 0
+7500 0
+8500 0
+9500 0
+10500 0
+End Data Section
+
+
+########################################################################
+#  Instruction Section
+########################################################################
+Begin Instruction Section
+# ───────────────── KERNEL BOOT ───────────────
+0   SET 1 105      # Set OS thread state to READY
+1   JIF 12 21       # JUMP to OS setup code
+
+# ─────────────── OS SETUP (21-29) ───────────────
+21  JIF 12 30       # JUMP to scheduler
+
+# ─────────────── MAIN SCHEDULER (30-73) ───────────────
+# _scheduler:
+30  ADD 3 1                 # global_instruction_counter++
+
+# _check_all_halted
+31 CPY 15 220
+32 SUBI 16 220
+33 JIF 220 86
+
+# _find_next_thread:
+34  CPY 0 103               # Save OS-PC
+35  CPY 1 104               # Save OS-SP
+36  ADD 11 1                # ++CUR_THREAD_IDX
+37  CPY 11 220              # tmp = CUR_THREAD_IDX
+38  SUBI 10 220             # tmp = THREAD_COUNT - tmp
+39  JIF 220 41              # if (idx < count) skip reset
+40  JIF 12 43               # Unconditional jump to continue
+41  SET 1 11                # Reset CUR_THREAD_IDX = 1
+42  JIF 12 43               # Unconditionally jump to TTB calculation
+
+# _get_thread_entry:
+43  CPY 11 221              # tmp_ptr = idx
+44  ADDI 221 221            # tmp_ptr *= 2
+45  ADDI 221 221            # tmp_ptr *= 4
+46  ADDI 221 221            # tmp_ptr *= 8 (slot size)
+47  ADDI 221 14             # tmp_ptr = TTB_BASE + (idx * 8)
+48  CPY 221 222             # 222 now holds the base address of the thread's slot
+
+# Check thread state
+49  ADD 222 5               # ptr -> state field (base + 5)
+50  CPYI 222 223            # 223 = thread.state
+51  CPY 223 225             # tmp = state
+52  SET 3 224               # const 3 (HALTED)
+53  SUBI 224 223            # result = 3 - state
+54  JIF 223 31              # if state==3 result=0 pick next.
+
+# Check if blocked
+55  ADD 222 1              # ptr back to slot base
+56  CPYI 222 223            # ptr -> block_counter (base + 6)
+57  JIF 223 68              # if block_counter <= 0 thread is not blocked jump to run
+58  ADD 223 -100
+59  ADD 222 -1              # ptr goes to state
+60  SET 0 260               # state = ready
+61  SET 260 261
+62  CPYI2 261 222
+63  ADD 222 1
+64  CPY 223 250             # 1. Store new value in TEMP_VAL_CELL
+65  SET 250 251             # 2. Store address of temp cell in TEMP_PTR_CELL
+66  CPYI2 251 222           # 3. Correct indirect write: thread.block_counter = new_value
+67  JIF 12 31               # Unconditionally pick next thread
+
+# Run the thread
+68  ADD 222 -1              # ptr goes back to state
+69  SET 1 262               # tmp = RUNNING
+70  SET 262 263
+71  CPYI2 263 222           # state = RUNNING
+72  ADD 222 -4              # ptr -> start-time
+73  SET 3 231               # TEMP_START_CELL = global_instruction_counter
+74  CPYI2 231 222
+75  JIF 12 81
+
+81  ADD 222 2               # ptr -> savedPC (base + 3)
+82  CPYI 222 6              # savedPC -> JUMP_PTR (for USER)
+83  ADD 222 1               # ptr -> savedSP (base + 4)
+84  CPYI 222 1              # savedSP -> SP
+85  USER 6                  # Switch to user mode and jump to addr in Mem[6]
+86  HLT                     # Should never be reached
+
+# ─────────────── SYSCALL DISPATCHER (74-112) ───────────────
+# _syscall_entry_save_context:
+87  CPY 11 221              # Get current thread index to calculate TTB slot
+88  ADDI 221 221
+89  ADDI 221 221
+90  ADDI 221 221
+91  ADDI 221 14             # 221 now holds base address of TTB slot
+92  ADD 221 2               # go to instr_used
+93  CPYI2 17 221
+94  ADD 221 1               # Point to saved-PC field (offset 3)
+95  CPY 230 250             # Use temp cells to write saved PC into TTB
+96  POP 250
+97  SET 250 251
+98  CPYI2 251 221
+99  ADD 221 1               # Point to saved-SP field (offset 4)
+100  CPY 1 250             # Use temp cells to write saved SP into TTB
+101  SET 250 251
+102  CPYI2 251 221
+103  JIF 12 104               # Unconditionally jump to the actual dispatcher
+
+
+# _syscall_dispatcher:
+104  CPY 4 230               # tmp = syscall_number
+105  JIF 230 111              # if 0 goto YIELD
+106  ADD 230 -1
+107 JIF 230 112              # if 1 goto HLT
+108  ADD 230 -1
+109 JIF 230 123             # if 2 goto PRN
+110  HLT                     # Invalid syscall halt system
+
+# _syscall_yield:
+111  JIF 12 30                # JUMP to scheduler
+
+# _syscall_hlt:
+112  CPY 11 221              # Calculate current thread's state address again
+113  ADDI 221 221
+114  ADDI 221 221
+115  ADDI 221 221
+116  ADDI 221 14
+117  ADD 221 5               # ptr -> state field
+118  SET 3 250               # 1. Store value 3 (HALTED) in temp cell
+119  SET 250 251             # 2. Store address of temp cell in temp pointer
+120  CPYI2 251 221           # 3. Correct indirect write: thread.state = 3
+121  ADD 15 1               # HALTED_THREAD_COUNT ++
+122 JIF 12 30               # Unconditional jump to schedule
+
+# _syscall_prn:
+123 CPY 11 221              # Calculate current thread's state/block address
+124 ADDI 221 221
+125 ADDI 221 221
+126 ADDI 221 221
+127 ADDI 221 14
+128 ADD 221 5               # 221 is ptr to state field
+129 SET 2 250               # 1. Store value 2 (BLOCKED) in temp cell
+130 SET 250 251             # 2. Store address of temp cell in temp pointer
+131 CPYI2 251 221           # 3. Correct indirect write: thread.state = 2
+132 ADD 221 1               # 221 is now ptr to block_counter field
+133 SET 100 250             # 1. Store value 100 in temp cell
+134 SET 250 251             # 2. Store address of temp cell in temp pointer
+135 CPYI2 251 221           # 3. Correct indirect write: thread.block_counter = 100
+136 JIF 12 30               # Unconditional jump to scheduler
+
+# ───────────── THREAD-1 Bubble-sort (FIXED) ─────────────
+# _thread1_start:
+1000 CPY 1000 1050          # i = N
+1001 ADD 1050 -1            # i = N-1 (outer loop counter)
+
+# _outer_loop:
+1002 SET 0 1051             # j = 0 (inner loop counter)
+
+# _inner_loop:
+1003 CPY 1050 1052          # tmp = i
+1004 CPY 1051 1059           # tmpj = j
+1005 SUBI 1052 1059          # tmpj = i - j
+1006 JIF 1059 1030           # if (i-j) <= 0 inner loop is done goto next pass
+
+1007 CPY 1056 1052          # ptr_j = array_base
+1008 ADDI 1052 1051          # ptr_j = array_base + j
+1009 CPY 1052 1053          # ptr_j+1 = ptr_j
+1010 ADD 1053 1             # ptr_j+1++
+1011 CPYI 1052 1054          # val_j = Mem[ptr_j]
+1012 CPYI 1053 1055          # val_j+1 = Mem[ptr_j+1]
+1013 SUBI 1054 1055          # result = val_j - val_j+1
+1014 JIF 1055 1025           # if (val_j - val_j+1) <= 0 order is correct skip swap
+
+# _swap:
+1015 CPYI2 1052 1057        # temp_swap_cell = val_j
+1016 CPYI2 1053 1052        # val_j = val_j+1
+1017 CPYI2 1057 1053        # val_j+1 = temp_swap_cell
+
+#_inner_loop_inc:
+1025 ADD 1051 1             # j++
+1026 JIF 12 1003            # Unconditional jump to _inner_loop
+
+# _next_outer_pass:
+1030 ADD 1050 -1            # i--
+1031 JIF 1050 1040           # if i <= 0 sort is done goto print
+1032 SET 1035 1100
+1033 PUSH 1100
+1034 SYSCALL YIELD            # Yield to OS
+1035 JIF 12 1002            # Unconditional jump to _outer_loop
+
+# _print_sorted_array:
+1040 CPY 1000 1050          # print_counter = N
+1041 SET 0 1051             # index k = 0
+
+# _print_loop:
+1042 JIF 1050 1052           # if counter <= 0 we are done HLT
+1043 CPY 1056 1052          # ptr = base
+1044 ADDI 1052 1051          # ptr = base + k
+1045 CPYI 1052 5             # Get value and put in syscall arg register
+1046 SET 1049 1101
+1047 PUSH 1101
+1048 SYSCALL PRN 5           # Print it
+1049 ADD 1051 1             # k++
+1050 ADD 1050 -1            # counter--
+1051 JIF 12 1042            # Unconditional jump to _print_loop
+
+1052 SYSCALL HLT             # Terminate thread
+
+# ───────────── THREAD-2 Linear Search (FIXED) ─────────────
+#_thread2_start:
+2000 SET 0 2050             # i = 0 (loop counter)
+
+# _search_loop:
+2001 CPY 2000 2053          # tmp = N
+2002 CPY 2050 2059          # tmpi = i
+2003 SUBI 2053 2059          # tmpi = N - i
+2004 JIF 2059 2021           # if (N-i) <= 0 loop is done key not found
+2005 SET 2002 2051          # base_ptr = 2002
+2006 CPY 2051 2052          # current_ptr = base_ptr
+2007 ADDI 2052 2050          # current_ptr = base_ptr + i
+2008 CPYI 2052 2053          # current_val = Mem[current_ptr]
+2009 CPY 2001 2060         # temp_key = key
+2010 SUBI 2053 2060          # result = current_val - KEY
+2011 JIF 2060 2027           # if result is 0 we found the key
+2012 ADD 2050 1             # i++
+2013 SET 2016 2100
+2014 PUSH 2100
+2015 SYSCALL YIELD
+2016 JIF 12 2001            # Unconditional jump to _search_loop
+
+# _key_found:
+2017 CPY 2050 5             # Copy the index 'i' to the print argument register
+2018 SET 2021 2101
+2019 PUSH 2101
+2020 SYSCALL PRN 5           # Print the found index
+2021 SYSCALL HLT             # Terminate
+
+#_key_not_found:
+2022 CPY 2054 5             # Copy -1 to the print argument register
+2023 SET 2026 2102
+2024 PUSH 2102
+2025 SYSCALL PRN 5           # Print -1
+2026 SYSCALL HLT             # Terminate
+
+#_reverse_check:
+2027 CPY 2001 2060
+2028 SUBI 2060 2053
+2029 JIF 2053 2017
+2030 JIF 12 2012
+
+# ───────────── THREAD-3 Demo Loop (FIXED) ─────────────
+#_thread3_start:
+3000 SET 1 3050             # Initialize counter = 1
+
+# _demo_loop:
+3001 CPY 3051 3070             # Copy loop limit
+3002 CPY 3050 3071
+3003 SUBI 3070 3071
+3004 JIF 3071 3014
+3005 CPY 3050 5
+3006 SET 3009 3101
+3007 PUSH 3101
+3008 SYSCALL PRN 5           # Print the counter
+3009 ADD 3050 1             # counter++
+3010 SET 3013 3100
+3011 PUSH 3100
+3012 SYSCALL YIELD           # Yield to OS
+3013 JIF 12 3001            # Unconditional jump back to loop start
+3014 SYSCALL HLT
+
+#_thread4_start
+4000 SYSCALL HLT
+
+#_thread5_start
+5000 SYSCALL HLT
+
+#_thread6_start
+6000 SYSCALL HLT
+
+#_thread7_start
+7000 SYSCALL HLT
+
+#_thread8_start
+8000 SYSCALL HLT
+
+#_thread9_start
+9000 SYSCALL HLT
+
+#_thread10_start
+10000 SYSCALL HLT
+
+End Instruction Section
+
+

@@ -1,0 +1,79 @@
+# ───────────────────────── Data Section ─────────────────────────
+Begin Data Section
+0   0      # PC starts at 0
+1   200    # SP starts at 200 (stack grows downwards)
+2   0
+3   0
+#
+50  0      # i (loop counter) – filled later
+51  0      # sum
+52  0      # temp (after POP)
+53  0      # temp for SUBI
+#
+100 5      # value for CPY
+101 0      # will receive copy of 100
+102 110    # pointer for CPYI  (points to 110)
+103 0      # will receive value via CPYI
+110 42     # data used by CPYI
+#
+104 40     # holds entry point for USER instruction
+#
+1000 0     # user-mode workspace
+1001 0
+End Data Section
+
+# ───────────────────── Instruction Section ─────────────────────
+Begin Instruction Section
+ 0 SET    5   100      # 100 ← 5
+ 1 CPY    100 101      # 101 ← 100
+ 2 SET    110 102      # 102 ← 110  (pointer)
+ 3 CPYI   102 103      # 103 ← *102  (i.e., 42)
+ 4 SET    10  50       # i ← 10
+ 5 SET    0   51       # sum ← 0
+ 6 PUSH   50           # push i     ┐  test PUSH
+ 7 POP    52           # 52 ← pop   ┘  test POP
+ 8 CALL   30           # call add_i_to_sum()
+ 9 ADD    50  -1       # i ← i - 1
+10 JIF    50  12       # if i <= 0 jump to USER sequence
+11 SET    2   8        # else loop: PC ← 8
+12 USER   104          # switch to USER mode, jump to *104 (40)
+13 HLT                # fallback halt (shouldn't hit)
+
+# -------- padding so line numbers stay contiguous -------------
+14 SET    0   0
+15 SET    0   0
+16 SET    0   0
+17 SET    0   0
+18 SET    0   0
+19 SET    0   0
+20 SET    0   0
+21 SET    0   0
+22 SET    0   0
+23 SET    0   0
+24 SET    0   0
+25 SET    0   0
+26 SET    0   0
+27 SET    0   0
+28 SET    0   0
+29 SET    0   0
+
+# -------- subroutine: add i to sum, plus SUBI test ------------
+30 ADDI   50  51        # sum += i
+31 SUBI   52  53        # 53 ← 52 - 53 (tests SUBI; 53 becomes value of i)
+32 RET                  # return to caller
+
+# -------- more padding so USER code starts exactly at 40 ------
+33 SET    0   0
+34 SET    0   0
+35 SET    0   0
+36 SET    0   0
+37 SET    0   0
+38 SET    0   0
+39 SET    0   0
+
+# -------- user-mode code (addresses ≥ 1000 only) --------------
+40 SET    1   1000      # user: 1000 ← 1
+41 ADD    1000 9        # user: 1000 ← 10
+42 CPY    1000 1001     # user: 1001 ← 1000
+43 HLT                  # final halt
+End Instruction Section
