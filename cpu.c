@@ -29,7 +29,7 @@ static void die_with_location(const char *msg, const char *file, int line) {
 #define DIE(msg) die_with_location(msg, __FILE__, __LINE__)
 
 /*=============================================================================
- * Opcode names (for tracing) – append SYSCALL
+ * Opcode names (for tracing)
  *============================================================================*/
 // static const char *opcode_names[] = {
 //     "SET", "CPY", "CPYI", "CPYI2", "ADD", "ADDI", "SUBI",
@@ -56,7 +56,7 @@ static long mem_read (const Cpu *cpu, long addr) { check_address(cpu, addr); ret
 static void mem_write(Cpu *cpu, long addr, long val) { check_address(cpu, addr); cpu->memory[addr] = val; }
 
 /*=============================================================================
- * Maps opcode text → enum value (added "SYSCALL")
+ * Maps opcode text → enum value
  *============================================================================*/
 static opcode_t parse_opcode(const char *txt) {
 #define EQ(s) if (strcmp(txt, s) == 0)
@@ -80,7 +80,7 @@ static opcode_t parse_opcode(const char *txt) {
 }
 
 /*=============================================================================
- * How many operands each opcode expects (updated for SYSCALL)
+ * How many operands each opcode expects
  *============================================================================*/
 static int operand_count(opcode_t op) {
     switch (op) {
@@ -96,7 +96,7 @@ static int operand_count(opcode_t op) {
 }
 
 /*=============================================================================
- * Loader – unchanged logic except it now accepts SYSCALL <num> <arg>
+ * Loader
  *============================================================================*/
 static int load_file(Cpu *cpu, const char *path) {
     FILE *fp = fopen(path, "r");
@@ -169,7 +169,7 @@ static int load_file(Cpu *cpu, const char *path) {
 }
 
 /*=============================================================================
- * Public API stubs (unchanged)
+ * Public API stubs
  *============================================================================*/
 int  cpu_init(Cpu *cpu)                 { if(!cpu) return -1; memset(cpu,0,sizeof*cpu); cpu->mode=KERNEL_MODE; return 0; }
 int  cpu_load_file(Cpu *c,const char*p){ return load_file(c,p);} 
@@ -178,7 +178,7 @@ long cpu_mem_read(const Cpu *c,long a) { return mem_read(c,a);}
 void cpu_mem_write(Cpu *c,long a,long v){ mem_write(c,a,v);} 
 
 /*=============================================================================
-* Execute one instruction (SYSCALL added)
+* Execute one instruction
 *============================================================================*/
 void cpu_execute(Cpu *cpu) {
     long pc = mem_read(cpu, 0);
@@ -205,7 +205,6 @@ void cpu_execute(Cpu *cpu) {
     mem_write(cpu, 3, mem_read(cpu, 3) + 1);
 
     switch (in.op) {
-        /* ─── existing cases (unchanged) ─────────────────────────────── */
         case OP_SET:   mem_write(cpu,in.b,in.a);                                   pc++; break;
         case OP_CPY:   mem_write(cpu,in.b,mem_read(cpu,in.a));                     pc++; break;
         case OP_CPYI: { long src = mem_read(cpu,in.a); mem_write(cpu,in.b,mem_read(cpu,src)); pc++; break; }
@@ -226,23 +225,20 @@ void cpu_execute(Cpu *cpu) {
                 pc = tgt;
                 break; }
 
-                /* ─── new SYSCALL instruction ────────────────────────────────── */
                 case OP_SYSCALL: {
                     cpu->mode = KERNEL_MODE;        /* enter kernel mode   */
                     if (in.a == 2) {                 /* PRN */
                         long addr = in.b;
                         long value = mem_read(cpu, addr);   /* safe read */
-                        if (cpu->memory[11] == 1)
+                        if (mem_read(cpu, 11) == 1)
                             printf("THREAD 1 (SORT) : %ld\n", value);
-                        else if (cpu->memory[11] == 2)
+                        else if (mem_read(cpu, 11) == 2)
                             printf("THREAD 2 (SEARCH) : %ld\n", value);
                         else
                             printf("THREAD 3 (PRINT) : %ld\n", value);
                                          /* print with newline */
                         
                         fflush(stdout);                     /* ensure immediate output */
-                        /* we still want the thread to block for 100 ticks,
-                        so fall through to the normal trap logic below           */
                         pc++;
 
                     }

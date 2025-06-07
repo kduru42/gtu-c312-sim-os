@@ -58,7 +58,7 @@ static int last_thread_id = -1;
 static void debug_hook_before(const Cpu *cpu)
 {
     if (debug_mode == 3) {
-        int cur = (int)cpu->memory[11];   /* CUR_THREAD cell in your OS */
+        int cur = (int)cpu->memory[11];   /* CUR_THREAD cell in OS */
         long sysno = cpu->memory[4];      /* syscall code */
         if (cpu->memory[0] == 87) // syscall
         {

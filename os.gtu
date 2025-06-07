@@ -149,12 +149,17 @@ Begin Data Section
 
 # --- data for user threads ---------------------------------------------
 # bubble-sort input (5 numbers for speed)
-1000 5        # N=5
-1001 7        # input numbers
+1000 10        # N=10
+1001 25        # input numbers
 1002 3
-1003 8
-1004 2
+1003 82
+1004 97
 1005 1
+1006 17
+1007 28
+1008 5
+1009 55
+1010 7
 # scratch space for sort
 1050 0        # i (outer loop)
 1051 0        # j (inner loop)
@@ -169,7 +174,7 @@ Begin Data Section
 
 # linear-search input
 2000 10       # N=10
-2001 11       # KEY to find
+2001 55       # KEY to find
 2002 12       # input numbers
 2003 77
 2004 3
@@ -190,7 +195,7 @@ Begin Data Section
 
 # demo-loop data
 3050 1        # counter
-3051 10       # loop limit
+3051 5       # loop limit
 3500 0
 
 4500 0
@@ -208,7 +213,7 @@ End Data Section
 ########################################################################
 Begin Instruction Section
 # ───────────────── KERNEL BOOT ───────────────
-0   SET 1 105      # Set OS thread state to READY
+0   SET 1 105      # Set OS thread state to RUNNING
 1   JIF 12 21       # JUMP to OS setup code
 
 # ─────────────── OS SETUP (21-29) ───────────────
